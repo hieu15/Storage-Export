@@ -1,0 +1,110 @@
+# /etc/prometheus/rules/storage_alerts.yml  -  BML storage (Dell PowerVault / Unity / IBM FlashSystem)
+# Health scale: 0=OK, 1=Warning/Degraded, 2=Critical/Fault, 3=Unknown
+groups:
+  - name: storage
+    rules:
+      # ---------------- Availability ----------------
+      - alert: StorageUnreachable
+        expr: storage_up == 0
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "[{{ $labels.site }}] {{ $labels.target }}: storage API unreachable"
+          description: "Exporter cannot log in / collect data. Check network to mgmt IP (443/7443), user monreport, or management controller."
+
+      # ---------------- Overall health ----------------
+      - alert: StorageHealthDegraded
+        expr: storage_system_health == 1
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "[{{ $labels.site }}] {{ $labels.target }}: system health DEGRADED"
+
+      - alert: StorageHealthCritical
+        expr: storage_system_health == 2
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "[{{ $labels.site }}] {{ $labels.target }}: system health CRITICAL"
+
+      - alert: StorageActiveAlert
+        expr: storage_alerts_active{severity=~"critical|warning"} > 0
+        for: 5m
+        labels: {severity: "{{ $labels.severity }}"}
+        annotations:
+          summary: "[{{ $labels.site }}] {{ $labels.target }}: {{ $value }} active {{ $labels.severity }} alert(s) on device"
+          description: "See panel '2. Active Alerts' on the Storage Health Check dashboard."
+
+      # ---------------- Hardware ----------------
+      - alert: StorageComponentFault
+        expr: storage_component_health == 2
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "[{{ $labels.site }}] {{ $labels.target }}: {{ $labels.type }} {{ $labels.component }} FAULT ({{ $labels.status }})"
+
+      - alert: StorageComponentDegraded
+        expr: storage_component_health == 1
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "[{{ $labels.site }}] {{ $labels.target }}: {{ $labels.type }} {{ $labels.component }} degraded ({{ $labels.status }})"
+
+      - alert: StorageDiskHot
+        expr: storage_disk_temperature_celsius > 55
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "[{{ $labels.site }}] {{ $labels.target }}: disk {{ $labels.component }} temperature {{ $value }}°C"
+
+      - alert: StorageSSDWearOut
+        expr: storage_disk_ssd_life_left_percent < 10
+        for: 1h
+        labels: {severity: warning}
+        annotations:
+          summary: "[{{ $labels.site }}] {{ $labels.target }}: SSD {{ $labels.component }} has {{ $value }}% life left"
+
+      # ---------------- Capacity ----------------
+      - alert: StoragePoolUsageHigh
+        expr: (1 - storage_pool_free_bytes / storage_pool_size_bytes) * 100 > 85
+        for: 30m
+        labels: {severity: warning}
+        annotations:
+          summary: "[{{ $labels.site }}] {{ $labels.target }}: pool {{ $labels.pool }} usage {{ $value | printf \"%.1f\" }}%"
+
+      - alert: StoragePoolUsageCritical
+        expr: (1 - storage_pool_free_bytes / storage_pool_size_bytes) * 100 > 95
+        for: 10m
+        labels: {severity: critical}
+        annotations:
+          summary: "[{{ $labels.site }}] {{ $labels.target }}: pool {{ $labels.pool }} usage {{ $value | printf \"%.1f\" }}%"
+
+      - alert: StoragePoolNotHealthy
+        expr: storage_pool_health > 0 and storage_pool_health < 3
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "[{{ $labels.site }}] {{ $labels.target }}: pool {{ $labels.pool }} not healthy"
+
+      - alert: StorageVolumeNotHealthy
+        expr: storage_volume_health > 0 and storage_volume_health < 3
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "[{{ $labels.site }}] {{ $labels.target }}: volume {{ $labels.volume }} not healthy"
+
+      # ---------------- Performance ----------------
+      - alert: StorageCPUHigh
+        expr: storage_cpu_percent > 90
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "[{{ $labels.site }}] {{ $labels.target }}: CPU {{ $labels.controller }} at {{ $value }}%"
+
+      # ---------------- Exporter ----------------
+      - alert: StorageExporterSectionError
+        expr: storage_section_error == 1
+        for: 30m
+        labels: {severity: info}
+        annotations:
+          summary: "[{{ $labels.site }}] {{ $labels.target }}: exporter failed to collect section '{{ $labels.section }}'"
